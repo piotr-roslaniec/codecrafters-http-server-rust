@@ -101,15 +101,12 @@ impl HttpRequest {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct StatusCode(u16);
 
 impl StatusCode {
     pub const OK: Self = Self(200);
     pub const NOT_FOUND: Self = Self(404);
-
-    pub fn as_u16(&self) -> u16 {
-        self.0
-    }
 
     pub fn as_str(&self) -> &str {
         match self.0 {
@@ -140,7 +137,7 @@ impl HttpResponse {
         Self::new(StatusCode::NOT_FOUND, b"Not Found")
     }
 
-    pub fn write_to_stream(&self, stream: &mut TcpStream) -> Result<()> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         let mut response = Vec::new();
 
         response.extend_from_slice(format!("HTTP/1.1 {}", self.status_code.as_str()).as_bytes());
@@ -152,10 +149,20 @@ impl HttpResponse {
         response.extend_from_slice(format!("Content-Length: {}", self.body.len()).as_bytes());
         response.extend_from_slice(CRLF.as_bytes());
 
+        if self.body.is_empty() {
+            response.extend_from_slice(CRLF.as_bytes());
+            return response;
+        }
+
         response.extend_from_slice(&self.body);
         response.extend_from_slice(CRLF.as_bytes());
         response.extend_from_slice(CRLF.as_bytes());
 
+        response
+    }
+
+    pub fn write_to_stream(&self, stream: &mut TcpStream) -> Result<()> {
+        let response = self.to_bytes();
         stream.write_all(&response)?;
         Ok(())
     }

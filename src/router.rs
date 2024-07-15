@@ -64,6 +64,7 @@ pub fn make_router() -> Router {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::http::StatusCode;
 
     #[test]
     fn test_router_parse_path() {
@@ -79,8 +80,12 @@ mod test {
         let router = make_router();
         let request = HttpRequest::from_string("GET / HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n").unwrap();
         let response = router.resolve(request).unwrap();
-        assert_eq!(response.status_code, 200);
+        assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, b"");
+        assert_eq!(
+            response.to_bytes(),
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n"
+        );
     }
 
     #[test]
@@ -89,8 +94,17 @@ mod test {
         let router = make_router();
         let request = HttpRequest::from_string(&format!("GET /echo/{} HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n", expected_body)).unwrap();
         let response = router.resolve(request).unwrap();
-        assert_eq!(response.status_code, 200);
+        assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, expected_body.as_bytes());
+        assert_eq!(
+            response.to_bytes(),
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n{}\r\n\r\n",
+                expected_body.len(),
+                expected_body
+            )
+            .as_bytes()
+        );
     }
 
     #[test]
@@ -98,8 +112,9 @@ mod test {
         let router = make_router();
         let request = HttpRequest::from_string("GET /not_found HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n").unwrap();
         let response = router.resolve(request).unwrap();
-        assert_eq!(response.status_code, 404);
+        assert_eq!(response.status_code, StatusCode::NOT_FOUND);
         assert_eq!(response.body, b"Not Found");
+        assert_eq!(response.to_bytes(), b"HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\nNot Found\r\n\r\n");
     }
 
     #[test]
@@ -107,7 +122,11 @@ mod test {
         let router = make_router();
         let request = HttpRequest::from_string("GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n").unwrap();
         let response = router.resolve(request).unwrap();
-        assert_eq!(response.status_code, 200);
+        assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, b"abc");
+        assert_eq!(
+            response.to_bytes(),
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\nabc\r\n\r\n"
+        );
     }
 }
