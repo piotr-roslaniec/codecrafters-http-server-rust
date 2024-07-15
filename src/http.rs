@@ -101,13 +101,32 @@ impl HttpRequest {
     }
 }
 
+pub struct StatusCode(u16);
+
+impl StatusCode {
+    pub const OK: Self = Self(200);
+    pub const NOT_FOUND: Self = Self(404);
+
+    pub fn as_u16(&self) -> u16 {
+        self.0
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self.0 {
+            200 => "200 OK",
+            404 => "404 Not Found",
+            _ => "500 Internal Server Error",
+        }
+    }
+}
+
 pub struct HttpResponse {
-    pub status_code: u16,
+    pub status_code: StatusCode,
     pub body: Vec<u8>,
 }
 
 impl HttpResponse {
-    fn new(status_code: u16, body: &[u8]) -> Self {
+    fn new(status_code: StatusCode, body: &[u8]) -> Self {
         Self {
             status_code,
             body: body.to_vec(),
@@ -115,18 +134,24 @@ impl HttpResponse {
     }
 
     pub fn ok(body: &[u8]) -> Self {
-        Self::new(200, body)
+        Self::new(StatusCode::OK, body)
     }
     pub fn not_found() -> Self {
-        Self::new(404, b"Not Found")
+        Self::new(StatusCode::NOT_FOUND, b"Not Found")
     }
 
     pub fn write_to_stream(&self, stream: &mut TcpStream) -> Result<()> {
         let mut response = Vec::new();
-        response.extend_from_slice(format!("HTTP/1.1 {}\r\n", self.status_code).as_bytes());
-        response.extend_from_slice(b"Content-Type: text/plain\r\n");
-        response.extend_from_slice(format!("Content-Length: {}\r\n", self.body.len()).as_bytes());
-        response.extend_from_slice(b"\r\n");
+
+        response.extend_from_slice(format!("HTTP/1.1 {}", self.status_code.as_str()).as_bytes());
+        response.extend_from_slice(CRLF.as_bytes());
+
+        response.extend_from_slice(b"Content-Type: text/plain");
+        response.extend_from_slice(CRLF.as_bytes());
+
+        response.extend_from_slice(format!("Content-Length: {}", self.body.len()).as_bytes());
+        response.extend_from_slice(CRLF.as_bytes());
+
         response.extend_from_slice(&self.body);
         response.extend_from_slice(CRLF.as_bytes());
         response.extend_from_slice(CRLF.as_bytes());
