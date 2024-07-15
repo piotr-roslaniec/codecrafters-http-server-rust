@@ -43,20 +43,17 @@ impl RequestLine {
     }
 }
 
-type RequestHeaders = HashMap<String, String>;
+pub type RequestHeaders = HashMap<String, String>;
 
 #[derive(Debug)]
 pub struct HttpRequest {
-    pub request_line: RequestLine,
-    pub request_headers: RequestHeaders,
+    pub line: RequestLine,
+    pub headers: RequestHeaders,
 }
 
 impl HttpRequest {
-    fn new(header: RequestLine, headers: RequestHeaders) -> Self {
-        Self {
-            request_line: header,
-            request_headers: headers,
-        }
+    fn new(line: RequestLine, headers: RequestHeaders) -> Self {
+        Self { line, headers }
     }
 
     pub fn from_tcp_stream(stream: &mut TcpStream) -> Result<HttpRequest> {
@@ -83,6 +80,7 @@ impl HttpRequest {
         let header = RequestLine::from_line(&lines[0])?;
         let mut headers = HashMap::new();
         for line in lines.iter().skip(1) {
+            let line = line.trim_end();
             if line.is_empty() {
                 continue;
             }
@@ -181,12 +179,12 @@ mod test {
         let lines = request.split(CRLF).map(|s| s.to_string()).collect();
         let http_request = super::HttpRequest::from_lines(lines).unwrap();
         let expected_header = RequestLine::new("GET", "/index.html", "HTTP/1.1");
-        assert_eq!(http_request.request_line, expected_header);
+        assert_eq!(http_request.line, expected_header);
 
         let mut expected_headers = std::collections::HashMap::new();
         expected_headers.insert("Host".to_string(), "localhost:4221".to_string());
         expected_headers.insert("User-Agent".to_string(), "curl/7.64.1".to_string());
         expected_headers.insert("Accept".to_string(), "*/*".to_string());
-        assert_eq!(http_request.request_headers, expected_headers);
+        assert_eq!(http_request.headers, expected_headers);
     }
 }
