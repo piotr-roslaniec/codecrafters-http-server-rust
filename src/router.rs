@@ -99,7 +99,7 @@ mod test {
         assert_eq!(
             response.to_bytes(),
             format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n{}\r\n\r\n",
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
                 expected_body.len(),
                 expected_body
             )
@@ -113,8 +113,11 @@ mod test {
         let request = HttpRequest::from_string("GET /not_found HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n").unwrap();
         let response = router.resolve(request).unwrap();
         assert_eq!(response.status_code, StatusCode::NOT_FOUND);
-        assert_eq!(response.body, b"Not Found");
-        assert_eq!(response.to_bytes(), b"HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\nNot Found\r\n\r\n");
+        assert_eq!(response.body, b"");
+        assert_eq!(
+            response.to_bytes(),
+            b"HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n"
+        );
     }
 
     #[test]
@@ -126,7 +129,7 @@ mod test {
         assert_eq!(response.body, b"abc");
         assert_eq!(
             response.to_bytes(),
-            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\nabc\r\n\r\n"
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc"
         );
     }
 }

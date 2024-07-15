@@ -134,7 +134,7 @@ impl HttpResponse {
         Self::new(StatusCode::OK, body)
     }
     pub fn not_found() -> Self {
-        Self::new(StatusCode::NOT_FOUND, b"Not Found")
+        Self::new(StatusCode::NOT_FOUND, b"")
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -149,15 +149,10 @@ impl HttpResponse {
         response.extend_from_slice(format!("Content-Length: {}", self.body.len()).as_bytes());
         response.extend_from_slice(CRLF.as_bytes());
 
-        if self.body.is_empty() {
-            response.extend_from_slice(CRLF.as_bytes());
-            return response;
-        }
+        // End of headers
+        response.extend_from_slice(CRLF.as_bytes());
 
         response.extend_from_slice(&self.body);
-        response.extend_from_slice(CRLF.as_bytes());
-        response.extend_from_slice(CRLF.as_bytes());
-
         response
     }
 
