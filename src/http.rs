@@ -49,18 +49,24 @@ pub type RequestHeaders = HashMap<String, String>;
 pub struct HttpRequest {
     pub line: RequestLine,
     pub headers: RequestHeaders,
+    pub connection: Option<String>,
 }
 
 impl HttpRequest {
     fn new(line: RequestLine, headers: RequestHeaders) -> Self {
-        Self { line, headers }
+        let connection = headers.get("Connection").cloned();
+        Self {
+            line,
+            headers,
+            connection,
+        }
     }
 
     pub fn from_string(request: &str) -> Result<HttpRequest> {
-        let lines = request.split(CRLF).map(|s| s.to_string()).collect();
+        let lines: Vec<String> = request.split(CRLF).map(|s| s.to_string()).collect();
         Self::from_lines(&lines)
     }
-    pub fn from_lines(lines: &Vec<String>) -> Result<Self> {
+    pub fn from_lines(lines: &[String]) -> Result<Self> {
         let header = RequestLine::from_line(&lines[0])?;
         let mut headers = HashMap::new();
         for line in lines.iter().skip(1) {
@@ -125,23 +131,25 @@ impl HttpResponse {
         response.extend_from_slice(format!("HTTP/1.1 {}", self.status_code.as_str()).as_bytes());
         response.extend_from_slice(CRLF.as_bytes());
 
-        response.extend_from_slice(b"Content-Type: text/plain");
-        response.extend_from_slice(CRLF.as_bytes());
-
-        response.extend_from_slice(format!("Content-Length: {}", self.body.len()).as_bytes());
-        response.extend_from_slice(CRLF.as_bytes());
-
-        // End of headers
-        response.extend_from_slice(CRLF.as_bytes());
-
         if !self.body.is_empty() {
+            // Headers
+            response.extend_from_slice(b"Content-Type: text/plain");
+            response.extend_from_slice(CRLF.as_bytes());
+
+            response.extend_from_slice(format!("Content-Length: {}", self.body.len()).as_bytes());
+            response.extend_from_slice(CRLF.as_bytes());
+
+            // End of headers
+            response.extend_from_slice(CRLF.as_bytes());
+
+            // Body
             response.extend_from_slice(&self.body);
         }
         response
     }
 
     pub fn to_string(&self) -> Result<String> {
-        Ok(String::from_utf8(self.to_bytes())?.to_string())
+        Ok(String::from_utf8_lossy(&self.to_bytes()).to_string())
     }
 }
 
@@ -179,10 +187,7 @@ mod test {
     #[test]
     fn response_to_bytes() {
         let response = HttpResponse::ok(b"");
-        assert_eq!(
-            response.to_bytes(),
-            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n"
-        );
+        assert_eq!(response.to_bytes(), b"HTTP/1.1 200 OK\r\n");
 
         let response = HttpResponse::ok(b"Hello, world!");
         assert_eq!(

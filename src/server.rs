@@ -22,23 +22,38 @@ impl Server {
         let listener = TcpListener::bind(&self.addr).await?;
 
         loop {
+            // Accept a new connection
             let (mut stream, _) = listener.accept().await?;
             let (reader, writer) = stream.split();
 
             let mut reader = FramedRead::new(reader, LinesCodec::new());
             let mut writer = FramedWrite::new(writer, LinesCodec::new());
 
-            let mut lines = Vec::new();
-            while let Some(Ok(msg)) = reader.next().await {
-                if msg.is_empty() {
+            // Handle the connection
+            loop {
+                let mut lines = Vec::new();
+                while let Some(Ok(msg)) = reader.next().await {
+                    if msg.is_empty() {
+                        break;
+                    }
+                    lines.push(msg);
+                }
+
+                // Break connection if no lines were read
+                if lines.is_empty() {
                     break;
                 }
-                lines.push(msg);
-            }
 
-            let request = HttpRequest::from_lines(&lines)?;
-            let response = self.router.resolve(request)?;
-            writer.send(response.to_string()?).await?;
+                let request = HttpRequest::from_lines(&lines)?;
+                let response = self.router.resolve(&request)?;
+
+                writer.send(response.to_string()?).await?;
+
+                // Break connection if the connection header is not set to keep-alive
+                if request.connection.as_deref() != Some("keep-alive") {
+                    break;
+                }
+            }
         }
     }
 }

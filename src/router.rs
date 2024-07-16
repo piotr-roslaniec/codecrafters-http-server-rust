@@ -23,7 +23,7 @@ impl Router {
             .to_string()
     }
 
-    pub fn resolve(&self, request: HttpRequest) -> Result<HttpResponse> {
+    pub fn resolve(&self, request: &HttpRequest) -> Result<HttpResponse> {
         for route in &self.routes {
             if self.parse_path(&request.line.path) == self.parse_path(&route.path) {
                 return Ok((route.handler)(request));
@@ -33,7 +33,7 @@ impl Router {
     }
 }
 
-pub type RouteHandler = fn(HttpRequest) -> HttpResponse;
+pub type RouteHandler = fn(&HttpRequest) -> HttpResponse;
 pub struct Route {
     path: String,
     handler: RouteHandler,
@@ -86,13 +86,10 @@ mod test {
     fn test_router_resolve_root() {
         let router = make_router();
         let request = HttpRequest::from_string("GET / HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n").unwrap();
-        let response = router.resolve(request).unwrap();
+        let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, b"");
-        assert_eq!(
-            response.to_bytes(),
-            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n"
-        );
+        assert_eq!(response.to_bytes(), b"HTTP/1.1 200 OK\r\n");
     }
 
     #[test]
@@ -100,7 +97,7 @@ mod test {
         let expected_body = "my_test_path";
         let router = make_router();
         let request = HttpRequest::from_string(&format!("GET /echo/{} HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n", expected_body)).unwrap();
-        let response = router.resolve(request).unwrap();
+        let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, expected_body.as_bytes());
         assert_eq!(
@@ -118,20 +115,17 @@ mod test {
     fn test_router_resolve_not_found() {
         let router = make_router();
         let request = HttpRequest::from_string("GET /not_found HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n").unwrap();
-        let response = router.resolve(request).unwrap();
+        let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::NOT_FOUND);
         assert_eq!(response.body, b"");
-        assert_eq!(
-            response.to_bytes(),
-            b"HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n"
-        );
+        assert_eq!(response.to_bytes(), b"HTTP/1.1 404 Not Found\r\n");
     }
 
     #[test]
     fn test_example() {
         let router = make_router();
         let request = HttpRequest::from_string("GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n").unwrap();
-        let response = router.resolve(request).unwrap();
+        let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, b"abc");
         assert_eq!(
@@ -145,7 +139,7 @@ mod test {
         let router = make_router();
         let user_agent = "banana/blueberry";
         let request = HttpRequest::from_string(&format!("GET /user-agent HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: {}\r\nAccept: */*\r\n\r\n", user_agent)).unwrap();
-        let response = router.resolve(request).unwrap();
+        let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, user_agent.as_bytes());
         assert_eq!(
