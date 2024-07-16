@@ -1,30 +1,23 @@
 use std::io::Error as IoError;
 use std::net::AddrParseError;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum ServerError {
-    IO(IoError),
-    AddrParse(AddrParseError),
-    HttpError(HttpError),
+    #[error("IO error: {0}")]
+    IO(#[from] IoError),
+    #[error("Address parse error: {0}")]
+    AddrParse(#[from] AddrParseError),
+    #[error("HTTP error: {0}")]
+    HttpError(#[from] HttpError),
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum HttpError {
+    #[error("Missing method")]
     MissingMethod,
+    #[error("Missing path")]
     MissingPath,
+    #[error("Missing version")]
     MissingVersion,
 }
-
-impl From<IoError> for ServerError {
-    fn from(error: IoError) -> Self {
-        ServerError::IO(error)
-    }
-}
-
-impl From<AddrParseError> for ServerError {
-    fn from(error: AddrParseError) -> Self {
-        ServerError::AddrParse(error)
-    }
-}
-
-pub type Result<T> = std::result::Result<T, ServerError>;

@@ -1,5 +1,5 @@
-use crate::error::Result;
 use crate::http::{HttpRequest, HttpResponse};
+use eyre::Result;
 
 pub struct Router {
     routes: Vec<Route>,

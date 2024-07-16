@@ -1,4 +1,5 @@
-use crate::error::{HttpError, Result, ServerError};
+use crate::error::{HttpError, ServerError};
+use eyre::Result;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
@@ -152,6 +153,10 @@ impl HttpResponse {
 
         response.extend_from_slice(&self.body);
         response
+    }
+
+    pub fn to_string(&self) -> Result<String> {
+        Ok(String::from_utf8(self.to_bytes())?.to_string())
     }
 
     pub fn write_to_stream(&self, stream: &mut TcpStream) -> Result<()> {

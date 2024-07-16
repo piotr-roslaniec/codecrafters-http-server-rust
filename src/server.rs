@@ -1,26 +1,38 @@
-use crate::error::Result;
 use crate::http::HttpRequest;
 use crate::router::Router;
-use std::net::TcpListener;
+use eyre::Result;
+use futures::{SinkExt, StreamExt};
+use tokio::net::TcpListener;
+use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 
 pub struct Server {
-    listener: TcpListener,
+    addr: String,
     router: Router,
 }
 
 impl Server {
     pub(crate) fn new(addr: &str, router: Router) -> Result<Server> {
-        let listener = TcpListener::bind(addr)?;
-        Ok(Self { listener, router })
+        Ok(Self {
+            addr: addr.to_string(),
+            router,
+        })
     }
 
-    pub(crate) fn listen(&self) -> Result<()> {
-        for stream in self.listener.incoming() {
-            let mut accepted_stream = stream?;
-            let request = HttpRequest::from_tcp_stream(&mut accepted_stream)?;
-            let response = self.router.resolve(request)?;
-            response.write_to_stream(&mut accepted_stream)?;
+    pub(crate) async fn listen(&self) -> Result<()> {
+        let listener = TcpListener::bind(&self.addr).await?;
+
+        loop {
+            let (mut stream, _) = listener.accept().await?;
+            let (reader, writer) = stream.split();
+
+            let mut reader = FramedRead::new(reader, LinesCodec::new());
+            let mut writer = FramedWrite::new(writer, LinesCodec::new());
+
+            while let Some(Ok(msg)) = reader.next().await {
+                let request = HttpRequest::from_string(&msg)?;
+                let response = self.router.resolve(request)?;
+                writer.send(response.to_string()?).await?;
+            }
         }
-        Ok(())
     }
 }
