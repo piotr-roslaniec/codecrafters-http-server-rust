@@ -118,8 +118,7 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
-    fn new(status_code: StatusCode, body: &[u8], headers: Option<ResponseHeaders>) -> Self {
-        let headers = headers.unwrap_or_default();
+    pub fn new(status_code: StatusCode, body: &[u8], headers: ResponseHeaders) -> Self {
         Self {
             status_code,
             headers,
@@ -127,11 +126,11 @@ impl HttpResponse {
         }
     }
 
-    pub fn ok(body: &[u8]) -> Self {
-        Self::new(StatusCode::OK, body, None)
+    pub fn ok(body: &[u8], headers: ResponseHeaders) -> Self {
+        Self::new(StatusCode::OK, body, headers)
     }
     pub fn not_found() -> Self {
-        Self::new(StatusCode::NOT_FOUND, b"", None)
+        Self::new(StatusCode::NOT_FOUND, b"", ResponseHeaders::new())
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -149,9 +148,6 @@ impl HttpResponse {
 
         if !self.body.is_empty() {
             // Headers
-            response.extend_from_slice(b"Content-Type: text/plain");
-            response.extend_from_slice(CRLF.as_bytes());
-
             response.extend_from_slice(format!("Content-Length: {}", self.body.len()).as_bytes());
             response.extend_from_slice(CRLF.as_bytes());
 
@@ -205,10 +201,15 @@ mod test {
 
     #[test]
     fn response_to_bytes() {
-        let response = HttpResponse::ok(b"");
+        let response = HttpResponse::ok(b"", ResponseHeaders::new());
         assert_eq!(response.to_bytes(), b"HTTP/1.1 200 OK\r\n\r\n");
 
-        let response = HttpResponse::ok(b"Hello, world!");
+        let headers = {
+            let mut headers = HashMap::new();
+            headers.insert("Content-Type".to_string(), "text/plain".to_string());
+            headers
+        };
+        let response = HttpResponse::ok(b"Hello, world!", headers);
         assert_eq!(
             response.to_bytes(),
             b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, world!"

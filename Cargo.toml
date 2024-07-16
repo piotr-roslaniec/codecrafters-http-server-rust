@@ -31,4 +31,5 @@ tokio-util = {  version = "0.7.11", features = ["codec"] }
 
 [dev-dependencies]
 pretty_assertions = "1.3.0"                         # nicer looking assertions
+tempdir = "0.3.7"
 
