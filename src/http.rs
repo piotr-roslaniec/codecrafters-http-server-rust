@@ -49,12 +49,15 @@ pub type RequestHeaders = HashMap<String, String>;
 pub struct HttpRequest {
     pub line: RequestLine,
     pub headers: RequestHeaders,
-    pub connection: Option<String>,
+    pub connection: String,
 }
 
 impl HttpRequest {
     fn new(line: RequestLine, headers: RequestHeaders) -> Self {
-        let connection = headers.get("Connection").cloned();
+        let connection = headers
+            .get("Connection")
+            .unwrap_or(&"keep-alive".to_string())
+            .to_owned();
         Self {
             line,
             headers,
@@ -105,24 +108,30 @@ impl StatusCode {
     }
 }
 
+pub type ResponseHeaders = HashMap<String, String>;
+
+#[derive(Debug)]
 pub struct HttpResponse {
     pub status_code: StatusCode,
+    pub headers: ResponseHeaders,
     pub body: Vec<u8>,
 }
 
 impl HttpResponse {
-    fn new(status_code: StatusCode, body: &[u8]) -> Self {
+    fn new(status_code: StatusCode, body: &[u8], headers: Option<ResponseHeaders>) -> Self {
+        let headers = headers.unwrap_or_default();
         Self {
             status_code,
+            headers,
             body: body.to_vec(),
         }
     }
 
     pub fn ok(body: &[u8]) -> Self {
-        Self::new(StatusCode::OK, body)
+        Self::new(StatusCode::OK, body, None)
     }
     pub fn not_found() -> Self {
-        Self::new(StatusCode::NOT_FOUND, b"")
+        Self::new(StatusCode::NOT_FOUND, b"", None)
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -130,6 +139,13 @@ impl HttpResponse {
 
         response.extend_from_slice(format!("HTTP/1.1 {}", self.status_code.as_str()).as_bytes());
         response.extend_from_slice(CRLF.as_bytes());
+
+        for (key, header) in &self.headers {
+            response.extend_from_slice(key.as_bytes());
+            response.extend_from_slice(b": ");
+            response.extend_from_slice(header.as_bytes());
+            response.extend_from_slice(CRLF.as_bytes());
+        }
 
         if !self.body.is_empty() {
             // Headers
@@ -144,6 +160,9 @@ impl HttpResponse {
 
             // Body
             response.extend_from_slice(&self.body);
+        } else {
+            // End of headers
+            response.extend_from_slice(CRLF.as_bytes());
         }
         response
     }
@@ -187,7 +206,7 @@ mod test {
     #[test]
     fn response_to_bytes() {
         let response = HttpResponse::ok(b"");
-        assert_eq!(response.to_bytes(), b"HTTP/1.1 200 OK\r\n");
+        assert_eq!(response.to_bytes(), b"HTTP/1.1 200 OK\r\n\r\n");
 
         let response = HttpResponse::ok(b"Hello, world!");
         assert_eq!(

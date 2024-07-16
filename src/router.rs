@@ -1,6 +1,7 @@
 use crate::http::{HttpRequest, HttpResponse};
 use eyre::Result;
 
+#[derive(Clone)]
 pub struct Router {
     routes: Vec<Route>,
 }
@@ -34,6 +35,7 @@ impl Router {
 }
 
 pub type RouteHandler = fn(&HttpRequest) -> HttpResponse;
+#[derive(Clone)]
 pub struct Route {
     path: String,
     handler: RouteHandler,
@@ -89,7 +91,7 @@ mod test {
         let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, b"");
-        assert_eq!(response.to_bytes(), b"HTTP/1.1 200 OK\r\n");
+        assert_eq!(response.to_bytes(), b"HTTP/1.1 200 OK\r\n\r\n");
     }
 
     #[test]
@@ -118,11 +120,22 @@ mod test {
         let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::NOT_FOUND);
         assert_eq!(response.body, b"");
-        assert_eq!(response.to_bytes(), b"HTTP/1.1 404 Not Found\r\n");
+        assert_eq!(response.to_bytes(), b"HTTP/1.1 404 Not Found\r\n\r\n");
     }
 
     #[test]
     fn test_example() {
+        let router = make_router();
+        let request =
+            HttpRequest::from_string("GET / HTTP/1.1\r\nHost: localhost:4221\r\n\r\n").unwrap();
+        let response = router.resolve(&request).unwrap();
+        assert_eq!(response.status_code, StatusCode::OK);
+        assert_eq!(response.body, b"");
+        assert_eq!(response.to_bytes(), b"HTTP/1.1 200 OK\r\n\r\n");
+    }
+
+    #[test]
+    fn test_echo_example() {
         let router = make_router();
         let request = HttpRequest::from_string("GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n").unwrap();
         let response = router.resolve(&request).unwrap();
