@@ -28,11 +28,17 @@ impl Server {
             let mut reader = FramedRead::new(reader, LinesCodec::new());
             let mut writer = FramedWrite::new(writer, LinesCodec::new());
 
+            let mut lines = Vec::new();
             while let Some(Ok(msg)) = reader.next().await {
-                let request = HttpRequest::from_string(&msg)?;
-                let response = self.router.resolve(request)?;
-                writer.send(response.to_string()?).await?;
+                if msg.is_empty() {
+                    break;
+                }
+                lines.push(msg);
             }
+
+            let request = HttpRequest::from_lines(&lines)?;
+            let response = self.router.resolve(request)?;
+            writer.send(response.to_string()?).await?;
         }
     }
 }

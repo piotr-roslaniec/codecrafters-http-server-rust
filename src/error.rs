@@ -20,4 +20,8 @@ pub enum HttpError {
     MissingPath,
     #[error("Missing version")]
     MissingVersion,
+    #[error("Missing header key")]
+    MissingHeaderKey,
+    #[error("Missing header value")]
+    MissingHeaderValue,
 }

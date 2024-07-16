@@ -1,8 +1,7 @@
 use crate::error::{HttpError, ServerError};
 use eyre::Result;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
-use std::net::TcpStream;
+use std::io::BufRead;
 
 const CRLF: &str = "\r\n";
 
@@ -57,27 +56,11 @@ impl HttpRequest {
         Self { line, headers }
     }
 
-    pub fn from_tcp_stream(stream: &mut TcpStream) -> Result<HttpRequest> {
-        let mut request_buff = BufReader::new(stream);
-
-        let mut lines = Vec::new();
-        loop {
-            let mut line = String::new();
-            request_buff.read_line(&mut line)?;
-            if line == CRLF {
-                break;
-            }
-            lines.push(line);
-        }
-
-        Self::from_lines(lines)
-    }
-
     pub fn from_string(request: &str) -> Result<HttpRequest> {
         let lines = request.split(CRLF).map(|s| s.to_string()).collect();
-        Self::from_lines(lines)
+        Self::from_lines(&lines)
     }
-    pub fn from_lines(lines: Vec<String>) -> Result<Self> {
+    pub fn from_lines(lines: &Vec<String>) -> Result<Self> {
         let header = RequestLine::from_line(&lines[0])?;
         let mut headers = HashMap::new();
         for line in lines.iter().skip(1) {
@@ -88,11 +71,11 @@ impl HttpRequest {
             let mut parts = line.split(": ");
             let key = parts
                 .next()
-                .ok_or(ServerError::HttpError(HttpError::MissingMethod))?
+                .ok_or(ServerError::HttpError(HttpError::MissingHeaderKey))?
                 .to_string();
             let value = parts
                 .next()
-                .ok_or(ServerError::HttpError(HttpError::MissingMethod))?
+                .ok_or(ServerError::HttpError(HttpError::MissingHeaderValue))?
                 .to_string();
             headers.insert(key, value);
         }
@@ -151,18 +134,14 @@ impl HttpResponse {
         // End of headers
         response.extend_from_slice(CRLF.as_bytes());
 
-        response.extend_from_slice(&self.body);
+        if !self.body.is_empty() {
+            response.extend_from_slice(&self.body);
+        }
         response
     }
 
     pub fn to_string(&self) -> Result<String> {
         Ok(String::from_utf8(self.to_bytes())?.to_string())
-    }
-
-    pub fn write_to_stream(&self, stream: &mut TcpStream) -> Result<()> {
-        let response = self.to_bytes();
-        stream.write_all(&response)?;
-        Ok(())
     }
 }
 
@@ -171,7 +150,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn header_from_line() {
+    fn request_from_line() {
         let request = "GET /index.html HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n";
         let header = RequestLine::from_line(request).unwrap();
         let expected_header = RequestLine::new("GET", "/index.html", "HTTP/1.1");
@@ -180,16 +159,35 @@ mod test {
 
     #[test]
     fn request_from_lines() {
-        let request = "GET /index.html HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n";
-        let lines = request.split(CRLF).map(|s| s.to_string()).collect();
-        let http_request = super::HttpRequest::from_lines(lines).unwrap();
+        let lines = vec![
+            "GET /index.html HTTP/1.1".to_string(),
+            "Host: localhost:4221".to_string(),
+            "User-Agent: curl/7.64.1".to_string(),
+            "Accept: */*".to_string(),
+        ];
+        let http_request = super::HttpRequest::from_lines(&lines).unwrap();
         let expected_header = RequestLine::new("GET", "/index.html", "HTTP/1.1");
         assert_eq!(http_request.line, expected_header);
 
-        let mut expected_headers = std::collections::HashMap::new();
+        let mut expected_headers = HashMap::new();
         expected_headers.insert("Host".to_string(), "localhost:4221".to_string());
         expected_headers.insert("User-Agent".to_string(), "curl/7.64.1".to_string());
         expected_headers.insert("Accept".to_string(), "*/*".to_string());
         assert_eq!(http_request.headers, expected_headers);
+    }
+
+    #[test]
+    fn response_to_bytes() {
+        let response = HttpResponse::ok(b"");
+        assert_eq!(
+            response.to_bytes(),
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n"
+        );
+
+        let response = HttpResponse::ok(b"Hello, world!");
+        assert_eq!(
+            response.to_bytes(),
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, world!"
+        );
     }
 }
