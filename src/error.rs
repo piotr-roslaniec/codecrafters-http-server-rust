@@ -24,4 +24,10 @@ pub enum HttpError {
     MissingHeaderKey,
     #[error("Missing header value")]
     MissingHeaderValue,
+    #[error("Invalid content length")]
+    InvalidContentLength,
+    #[error("Missing request line")]
+    MissingRequestLine,
+    #[error("Invalid content type")]
+    InvalidContentType,
 }

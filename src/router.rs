@@ -54,11 +54,20 @@ pub fn make_router(directory: Option<String>) -> Router {
 
     let default_route = Route::new(
         "/",
-        Box::new(|_request| HttpResponse::ok(b"", ResponseHeaders::new())),
+        Box::new(|request| {
+            if request.line.method == "GET" {
+                HttpResponse::ok(b"", ResponseHeaders::new())
+            } else {
+                HttpResponse::method_not_allowed()
+            }
+        }),
     );
     let echo_route = Route::new(
         "/echo",
         Box::new(move |request| {
+            if request.line.method != "GET" {
+                return HttpResponse::method_not_allowed();
+            }
             let path_without_prefix = request.line.path.trim_start_matches("/echo/");
             let mut headers = ResponseHeaders::new();
             headers.insert("Content-Type".to_string(), "text/plain".to_string());
@@ -68,6 +77,9 @@ pub fn make_router(directory: Option<String>) -> Router {
     let user_agent_route = Route::new(
         "/user-agent",
         Box::new(move |request| {
+            if request.line.method != "GET" {
+                return HttpResponse::method_not_allowed();
+            }
             let default = String::new();
             let user_agent = request.headers.get("User-Agent").unwrap_or(&default);
             let mut headers = ResponseHeaders::new();
@@ -78,23 +90,31 @@ pub fn make_router(directory: Option<String>) -> Router {
     let files_route = Route::new(
         "/files",
         Box::new(move |request| {
-            let headers = {
-                let mut headers = ResponseHeaders::new();
-                headers.insert(
-                    "Content-Type".to_string(),
-                    "application/octet-stream".to_string(),
-                );
-                headers
-            };
+            let mut headers = ResponseHeaders::new();
+            headers.insert(
+                "Content-Type".to_string(),
+                "application/octet-stream".to_string(),
+            );
+            let default_dir = "/tmp".to_string();
+            let directory = directory.as_ref().unwrap_or(&default_dir);
             let file = request.line.path.trim_start_matches("/files/");
-            let binding = String::new();
-            let file_path_from_root = directory.as_ref().unwrap_or(&binding);
-            let file = format!("{}/{}", file_path_from_root, file);
-            let body = match std::fs::read(file) {
-                Ok(contents) => contents,
-                Err(_) => return HttpResponse::not_found(),
-            };
-            HttpResponse::new(StatusCode::OK, &body, headers)
+            let file = format!("{}/{}", directory, file);
+
+            if request.line.method == "GET" {
+                let body = match std::fs::read(file) {
+                    Ok(contents) => contents,
+                    Err(_) => return HttpResponse::not_found(),
+                };
+                HttpResponse::new(StatusCode::OK, &body, headers)
+            } else if request.line.method == "POST" {
+                let request_body = request.body.clone();
+                match std::fs::write(file, request_body) {
+                    Ok(_) => HttpResponse::created(),
+                    Err(_) => HttpResponse::internal_server_error(),
+                }
+            } else {
+                HttpResponse::method_not_allowed()
+            }
         }),
     );
 
@@ -229,5 +249,35 @@ mod test {
         assert_eq!(response.status_code, StatusCode::NOT_FOUND);
         assert_eq!(response.body, b"");
         assert_eq!(response.to_bytes(), b"HTTP/1.1 404 Not Found\r\n\r\n");
+    }
+
+    #[test]
+    fn test_files_post() {
+        let tmp_dir = TempDir::new("test_files").unwrap();
+        let file_path = tmp_dir.path().join("test.txt");
+        let router = make_router(Some(tmp_dir.path().to_str().unwrap().to_string()));
+        let request = HttpRequest::from_string("POST /files/test.txt HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nContent-Length: 4\r\nContent-Type: application/octet-stream\r\nAccept: */*\r\n\r\ntest").unwrap();
+        let response = router.resolve(&request).unwrap();
+        assert_eq!(response.status_code, StatusCode::CREATED);
+        assert_eq!(response.body, b"");
+        assert_eq!(response.to_bytes(), b"HTTP/1.1 201 Created\r\n\r\n");
+        assert_eq!(std::fs::read_to_string(file_path).unwrap(), "test");
+    }
+
+    #[test]
+    fn test_post_example() {
+        let contents = "mango banana mango grape blueberry orange banana grape";
+        let filename = "strawberry_blueberry_raspberry_raspberry";
+        let tmp_dir = TempDir::new("test_files").unwrap();
+        let file_path = tmp_dir.path().join(filename);
+
+        let request_str = format!("POST /files/{} HTTP/1.1\r\nHost: localhost:4221\r\nContent-Length: {}\r\nContent-Type: application/octet-stream\r\n\r\n{}", filename, contents.len(), contents);
+        let request = HttpRequest::from_string(&request_str).unwrap();
+        let router = make_router(Some(tmp_dir.path().to_str().unwrap().to_string()));
+        let response = router.resolve(&request).unwrap();
+        assert_eq!(response.status_code, StatusCode::CREATED);
+        assert_eq!(response.body, b"");
+        assert_eq!(response.to_bytes(), b"HTTP/1.1 201 Created\r\n\r\n");
+        assert_eq!(std::fs::read_to_string(file_path).unwrap(), contents);
     }
 }

@@ -1,10 +1,11 @@
 use crate::http::HttpRequest;
 use crate::router::Router;
+use bytes::Bytes;
 use eyre::Result;
 use futures::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
+use tokio_util::codec::{BytesCodec, FramedRead, FramedWrite};
 
 #[derive(Clone)]
 pub struct Server {
@@ -29,29 +30,28 @@ impl Server {
 
             tokio::spawn(async move {
                 let (reader, writer) = stream.split();
-                let mut reader = FramedRead::new(reader, LinesCodec::new());
-                let mut writer = FramedWrite::new(writer, LinesCodec::new());
+                let mut reader = FramedRead::new(reader, BytesCodec::new());
+                let mut writer = FramedWrite::new(writer, BytesCodec::new());
 
                 loop {
-                    let mut lines = Vec::new();
-                    while let Some(Ok(msg)) = reader.next().await {
-                        if msg.is_empty() {
+                    let bytes = match reader.next().await {
+                        Some(Ok(l)) => l,
+                        Some(Err(e)) => {
+                            eprintln!("Failed to read bytes: {:?}", e);
                             break;
                         }
-                        lines.push(msg);
-                    }
+                        None => break,
+                    };
+                    println!("Received bytes: {:?}", bytes);
 
-                    if lines.is_empty() {
-                        break;
-                    }
-
-                    let request = match HttpRequest::from_lines(&lines) {
+                    let request = match HttpRequest::from_bytes(&bytes) {
                         Ok(req) => req,
                         Err(e) => {
                             eprintln!("Failed to parse request: {:?}", e);
                             break;
                         }
                     };
+                    println!("Parsed request: {:?}", request);
 
                     let response = match router.resolve(&request) {
                         Ok(resp) => resp,
@@ -60,8 +60,9 @@ impl Server {
                             break;
                         }
                     };
+                    println!("Resolved response: {:?}", response);
 
-                    if let Err(e) = writer.send(response.to_string().unwrap_or_default()).await {
+                    if let Err(e) = writer.send(Bytes::from(response.to_bytes())).await {
                         eprintln!("Failed to send response: {:?}", e);
                         break;
                     }
