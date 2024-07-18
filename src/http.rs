@@ -227,7 +227,6 @@ impl HttpResponse {
 
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let mut response = Vec::new();
-
         response.extend_from_slice(format!("HTTP/1.1 {}", self.status_code.as_str()).as_bytes());
         response.extend_from_slice(CRLF.as_bytes());
 

@@ -195,7 +195,7 @@ mod test {
                 expected_body.len(),
                 expected_body
             )
-                .as_bytes()
+            .as_bytes()
         );
     }
 
@@ -251,7 +251,7 @@ mod test {
                 user_agent.len(),
                 user_agent
             )
-                .as_bytes()
+            .as_bytes()
         );
     }
 
