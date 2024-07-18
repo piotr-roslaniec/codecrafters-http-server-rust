@@ -28,6 +28,4 @@ pub enum HttpError {
     InvalidContentLength,
     #[error("Missing request line")]
     MissingRequestLine,
-    #[error("Invalid content type")]
-    InvalidContentType,
 }

@@ -152,7 +152,6 @@ fn accept_encoding(request: &HttpRequest, headers: &mut HashMap<String, String>)
 mod test {
     use super::*;
     use crate::http::StatusCode;
-    use nom::AsBytes;
 
     use tempdir::TempDir;
 

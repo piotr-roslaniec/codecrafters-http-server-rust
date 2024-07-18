@@ -57,6 +57,7 @@ pub struct HttpRequest {
 
 impl HttpRequest {
     fn new(line: RequestLine, headers: RequestHeaders, body: Vec<u8>) -> Self {
+        // Default to keep-alive in HTTP/1.1
         let connection = headers
             .get("Connection")
             .unwrap_or(&"keep-alive".to_string())
@@ -135,16 +136,6 @@ impl HttpRequest {
             .unwrap_or(0);
 
         if content_length != 0 {
-            // Make sure the Content-Type header is present and set to "application/octet-stream"
-            // if !headers.contains_key("Content-Type") {
-            //     return Err(ServerError::HttpError(HttpError::MissingHeaderValue).into());
-            // } else {
-            //     let content_type = headers.get("Content-Type").unwrap();
-            //     if content_type != "application/octet-stream" {
-            //         return Err(ServerError::HttpError(HttpError::InvalidContentType).into());
-            //     }
-            // }
-
             let body: Vec<u8> = body_lines
                 .iter()
                 .flat_map(|line| line.as_bytes())
@@ -212,9 +203,7 @@ impl HttpResponse {
     }
 
     pub fn method_not_allowed() -> Self {
-        let mut headers = ResponseHeaders::new();
-        headers.insert("Allow".to_string(), "GET".to_string());
-        Self::new(StatusCode::NOT_ALLOWED, b"", headers)
+        Self::new(StatusCode::NOT_ALLOWED, b"", ResponseHeaders::new())
     }
 
     pub fn internal_server_error() -> Self {
