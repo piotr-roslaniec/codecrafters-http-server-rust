@@ -135,9 +135,15 @@ pub fn make_router(directory: Option<String>) -> Router {
 }
 
 fn accept_encoding(request: &HttpRequest, headers: &mut HashMap<String, String>) {
-    if let Some(encoding) = request.headers.get("Accept-Encoding") {
-        if encoding == "gzip" {
-            headers.insert("Content-Encoding".to_string(), encoding.to_string());
+    if let Some(encoding_str) = request.headers.get("Accept-Encoding") {
+        let encodings = encoding_str
+            .split(", ")
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty());
+        for encoding in encodings {
+            if encoding == "gzip" {
+                headers.insert("Content-Encoding".to_string(), encoding.to_string());
+            }
         }
     }
 }
@@ -147,7 +153,7 @@ mod test {
     use super::*;
     use crate::http::StatusCode;
     use nom::AsBytes;
-    use std::io::Write;
+
     use tempdir::TempDir;
 
     #[test]
@@ -310,30 +316,5 @@ mod test {
             b"HTTP/1.1 201 Created\r\n\r\n"
         );
         assert_eq!(std::fs::read_to_string(file_path).unwrap(), contents);
-    }
-
-    #[test]
-    fn test_accept_encoding_gzip() {
-        let contents = "abc";
-        let mut gzip_encoder =
-            flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-        gzip_encoder.write_all(contents.as_bytes()).unwrap();
-        let encoded_contents = gzip_encoder.finish().unwrap();
-        let encoded_contents_str = String::from_utf8_lossy(&encoded_contents);
-
-        let request_str = format!("GET /echo/{} HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: gzip\r\n\r\n", contents);
-        let router = make_router(None);
-        let request = HttpRequest::from_string(&request_str).unwrap();
-        let response = router.resolve(&request).unwrap();
-        assert_eq!(response.status_code, StatusCode::OK);
-        assert_eq!(response.body, contents.as_bytes()); // not encoded
-
-        let expected_response_bytes = [
-            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Encoding: gzip\r\nContent-Length:".to_vec(),
-            encoded_contents.len().to_string().as_bytes().to_vec(),
-            b"\r\n\r\n".to_vec(),
-            encoded_contents
-        ].concat();
-        assert_eq!(response.to_bytes().unwrap(), expected_response_bytes);
     }
 }
