@@ -1,6 +1,9 @@
 use crate::error::{HttpError, ServerError};
 use eyre::Result;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use std::collections::HashMap;
+use std::io::Write;
 
 const CRLF: &str = "\r\n";
 
@@ -222,7 +225,7 @@ impl HttpResponse {
         )
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let mut response = Vec::new();
 
         response.extend_from_slice(format!("HTTP/1.1 {}", self.status_code.as_str()).as_bytes());
@@ -236,24 +239,37 @@ impl HttpResponse {
         }
 
         if !self.body.is_empty() {
-            // Headers
-            response.extend_from_slice(format!("Content-Length: {}", self.body.len()).as_bytes());
+            let content_encoding = self.headers.get("Content-Encoding");
+            let body = if content_encoding.is_some() {
+                match content_encoding.unwrap().as_str() {
+                    "gzip" => {
+                        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+                        encoder.write_all(&self.body)?;
+                        encoder.finish()?
+                    }
+                    _ => self.body.clone(),
+                }
+            } else {
+                self.body.clone()
+            };
+
+            response.extend_from_slice(format!("Content-Length: {}", body.len()).as_bytes());
             response.extend_from_slice(CRLF.as_bytes());
 
             // End of headers
             response.extend_from_slice(CRLF.as_bytes());
 
             // Body
-            response.extend_from_slice(&self.body);
+            response.extend_from_slice(&body);
         } else {
-            // End of headers
+            // End of headers, no body
             response.extend_from_slice(CRLF.as_bytes());
         }
-        response
+        Ok(response)
     }
 
     pub fn to_string(&self) -> Result<String> {
-        Ok(String::from_utf8_lossy(&self.to_bytes()).to_string())
+        Ok(String::from_utf8_lossy(&self.to_bytes()?).to_string())
     }
 }
 
@@ -302,7 +318,7 @@ mod test {
     #[test]
     fn response_to_bytes() {
         let response = HttpResponse::ok(b"", ResponseHeaders::new());
-        assert_eq!(response.to_bytes(), b"HTTP/1.1 200 OK\r\n\r\n");
+        assert_eq!(response.to_bytes().unwrap(), b"HTTP/1.1 200 OK\r\n\r\n");
 
         let headers = {
             let mut headers = HashMap::new();
@@ -311,7 +327,7 @@ mod test {
         };
         let response = HttpResponse::ok(b"Hello, world!", headers);
         assert_eq!(
-            response.to_bytes(),
+            response.to_bytes().unwrap(),
             b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, world!"
         );
     }

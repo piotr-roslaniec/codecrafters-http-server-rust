@@ -1,5 +1,6 @@
 use crate::http::{HttpRequest, HttpResponse, ResponseHeaders, StatusCode};
 use eyre::Result;
+use std::collections::HashMap;
 
 pub struct Router {
     routes: Vec<Route>,
@@ -69,8 +70,13 @@ pub fn make_router(directory: Option<String>) -> Router {
                 return HttpResponse::method_not_allowed();
             }
             let path_without_prefix = request.line.path.trim_start_matches("/echo/");
+
             let mut headers = ResponseHeaders::new();
             headers.insert("Content-Type".to_string(), "text/plain".to_string());
+            if let Some(response) = accept_encoding(request, &mut headers) {
+                return response;
+            }
+
             HttpResponse::ok(path_without_prefix.as_bytes(), headers)
         }),
     );
@@ -82,8 +88,13 @@ pub fn make_router(directory: Option<String>) -> Router {
             }
             let default = String::new();
             let user_agent = request.headers.get("User-Agent").unwrap_or(&default);
+
             let mut headers = ResponseHeaders::new();
             headers.insert("Content-Type".to_string(), "text/plain".to_string());
+            if let Some(response) = accept_encoding(request, &mut headers) {
+                return response;
+            }
+
             HttpResponse::ok(user_agent.as_bytes(), headers)
         }),
     );
@@ -95,6 +106,10 @@ pub fn make_router(directory: Option<String>) -> Router {
                 "Content-Type".to_string(),
                 "application/octet-stream".to_string(),
             );
+            if let Some(response) = accept_encoding(request, &mut headers) {
+                return response;
+            }
+
             let default_dir = "/tmp".to_string();
             let directory = directory.as_ref().unwrap_or(&default_dir);
             let file = request.line.path.trim_start_matches("/files/");
@@ -125,10 +140,25 @@ pub fn make_router(directory: Option<String>) -> Router {
     router
 }
 
+fn accept_encoding(
+    request: &HttpRequest,
+    headers: &mut HashMap<String, String>,
+) -> Option<HttpResponse> {
+    if let Some(encoding) = request.headers.get("Accept-Encoding") {
+        if encoding != "gzip" {
+            return Some(HttpResponse::not_found());
+        }
+        headers.insert("Content-Encoding".to_string(), encoding.to_string());
+    }
+    None
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::http::StatusCode;
+    use nom::AsBytes;
+    use std::io::Write;
     use tempdir::TempDir;
 
     #[test]
@@ -147,7 +177,7 @@ mod test {
         let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, b"");
-        assert_eq!(response.to_bytes(), b"HTTP/1.1 200 OK\r\n\r\n");
+        assert_eq!(response.to_bytes().unwrap(), b"HTTP/1.1 200 OK\r\n\r\n");
     }
 
     #[test]
@@ -159,13 +189,13 @@ mod test {
         assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, expected_body.as_bytes());
         assert_eq!(
-            response.to_bytes(),
+            response.to_bytes().unwrap(),
             format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
                 expected_body.len(),
                 expected_body
             )
-            .as_bytes()
+                .as_bytes()
         );
     }
 
@@ -176,7 +206,10 @@ mod test {
         let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::NOT_FOUND);
         assert_eq!(response.body, b"");
-        assert_eq!(response.to_bytes(), b"HTTP/1.1 404 Not Found\r\n\r\n");
+        assert_eq!(
+            response.to_bytes().unwrap(),
+            b"HTTP/1.1 404 Not Found\r\n\r\n"
+        );
     }
 
     #[test]
@@ -187,7 +220,7 @@ mod test {
         let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, b"");
-        assert_eq!(response.to_bytes(), b"HTTP/1.1 200 OK\r\n\r\n");
+        assert_eq!(response.to_bytes().unwrap(), b"HTTP/1.1 200 OK\r\n\r\n");
     }
 
     #[test]
@@ -198,7 +231,7 @@ mod test {
         assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, b"abc");
         assert_eq!(
-            response.to_bytes(),
+            response.to_bytes().unwrap(),
             b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc"
         );
     }
@@ -212,13 +245,13 @@ mod test {
         assert_eq!(response.status_code, StatusCode::OK);
         assert_eq!(response.body, user_agent.as_bytes());
         assert_eq!(
-            response.to_bytes(),
+            response.to_bytes().unwrap(),
             format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
                 user_agent.len(),
                 user_agent
             )
-            .as_bytes()
+                .as_bytes()
         );
     }
 
@@ -248,7 +281,10 @@ mod test {
         let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::NOT_FOUND);
         assert_eq!(response.body, b"");
-        assert_eq!(response.to_bytes(), b"HTTP/1.1 404 Not Found\r\n\r\n");
+        assert_eq!(
+            response.to_bytes().unwrap(),
+            b"HTTP/1.1 404 Not Found\r\n\r\n"
+        );
     }
 
     #[test]
@@ -260,12 +296,15 @@ mod test {
         let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::CREATED);
         assert_eq!(response.body, b"");
-        assert_eq!(response.to_bytes(), b"HTTP/1.1 201 Created\r\n\r\n");
+        assert_eq!(
+            response.to_bytes().unwrap(),
+            b"HTTP/1.1 201 Created\r\n\r\n"
+        );
         assert_eq!(std::fs::read_to_string(file_path).unwrap(), "test");
     }
 
     #[test]
-    fn test_post_example() {
+    fn test_post_file_example() {
         let contents = "mango banana mango grape blueberry orange banana grape";
         let filename = "strawberry_blueberry_raspberry_raspberry";
         let tmp_dir = TempDir::new("test_files").unwrap();
@@ -277,7 +316,35 @@ mod test {
         let response = router.resolve(&request).unwrap();
         assert_eq!(response.status_code, StatusCode::CREATED);
         assert_eq!(response.body, b"");
-        assert_eq!(response.to_bytes(), b"HTTP/1.1 201 Created\r\n\r\n");
+        assert_eq!(
+            response.to_bytes().unwrap(),
+            b"HTTP/1.1 201 Created\r\n\r\n"
+        );
         assert_eq!(std::fs::read_to_string(file_path).unwrap(), contents);
+    }
+
+    #[test]
+    fn test_accept_encoding_gzip() {
+        let contents = "abc";
+        let mut gzip_encoder =
+            flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        gzip_encoder.write_all(contents.as_bytes()).unwrap();
+        let encoded_contents = gzip_encoder.finish().unwrap();
+        let encoded_contents_str = String::from_utf8_lossy(&encoded_contents);
+
+        let request_str = format!("GET /echo/{} HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: gzip\r\n\r\n", contents);
+        let router = make_router(None);
+        let request = HttpRequest::from_string(&request_str).unwrap();
+        let response = router.resolve(&request).unwrap();
+        assert_eq!(response.status_code, StatusCode::OK);
+        assert_eq!(response.body, contents.as_bytes()); // not encoded
+
+        let expected_response_bytes = [
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Encoding: gzip\r\nContent-Length:".to_vec(),
+            encoded_contents.len().to_string().as_bytes().to_vec(),
+            b"\r\n\r\n".to_vec(),
+            encoded_contents
+        ].concat();
+        assert_eq!(response.to_bytes().unwrap(), expected_response_bytes);
     }
 }

@@ -42,7 +42,6 @@ impl Server {
                         }
                         None => break,
                     };
-                    println!("Received bytes: {:?}", bytes);
 
                     let request = match HttpRequest::from_bytes(&bytes) {
                         Ok(req) => req,
@@ -51,7 +50,6 @@ impl Server {
                             break;
                         }
                     };
-                    println!("Parsed request: {:?}", request);
 
                     let response = match router.resolve(&request) {
                         Ok(resp) => resp,
@@ -60,9 +58,15 @@ impl Server {
                             break;
                         }
                     };
-                    println!("Resolved response: {:?}", response);
+                    let response_bytes = match response.to_bytes() {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            eprintln!("Failed to serialize response: {:?}", e);
+                            break;
+                        }
+                    };
 
-                    if let Err(e) = writer.send(Bytes::from(response.to_bytes())).await {
+                    if let Err(e) = writer.send(Bytes::from(response_bytes)).await {
                         eprintln!("Failed to send response: {:?}", e);
                         break;
                     }

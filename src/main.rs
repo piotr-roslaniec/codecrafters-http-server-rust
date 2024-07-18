@@ -1,3 +1,5 @@
+extern crate core;
+
 use crate::router::make_router;
 use crate::server::Server;
 use eyre::Result;
@@ -18,6 +20,7 @@ async fn main() -> Result<()> {
     } else {
         None
     };
+
     let router = make_router(directory);
     let server = Server::new("127.0.0.1:4221", router)?;
     server.listen().await
