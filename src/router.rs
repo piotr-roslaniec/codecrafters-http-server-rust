@@ -73,9 +73,7 @@ pub fn make_router(directory: Option<String>) -> Router {
 
             let mut headers = ResponseHeaders::new();
             headers.insert("Content-Type".to_string(), "text/plain".to_string());
-            if let Some(response) = accept_encoding(request, &mut headers) {
-                return response;
-            }
+            accept_encoding(request, &mut headers);
 
             HttpResponse::ok(path_without_prefix.as_bytes(), headers)
         }),
@@ -91,9 +89,7 @@ pub fn make_router(directory: Option<String>) -> Router {
 
             let mut headers = ResponseHeaders::new();
             headers.insert("Content-Type".to_string(), "text/plain".to_string());
-            if let Some(response) = accept_encoding(request, &mut headers) {
-                return response;
-            }
+            accept_encoding(request, &mut headers);
 
             HttpResponse::ok(user_agent.as_bytes(), headers)
         }),
@@ -106,9 +102,7 @@ pub fn make_router(directory: Option<String>) -> Router {
                 "Content-Type".to_string(),
                 "application/octet-stream".to_string(),
             );
-            if let Some(response) = accept_encoding(request, &mut headers) {
-                return response;
-            }
+            accept_encoding(request, &mut headers);
 
             let default_dir = "/tmp".to_string();
             let directory = directory.as_ref().unwrap_or(&default_dir);
@@ -140,17 +134,12 @@ pub fn make_router(directory: Option<String>) -> Router {
     router
 }
 
-fn accept_encoding(
-    request: &HttpRequest,
-    headers: &mut HashMap<String, String>,
-) -> Option<HttpResponse> {
+fn accept_encoding(request: &HttpRequest, headers: &mut HashMap<String, String>) {
     if let Some(encoding) = request.headers.get("Accept-Encoding") {
-        if encoding != "gzip" {
-            return Some(HttpResponse::not_found());
+        if encoding == "gzip" {
+            headers.insert("Content-Encoding".to_string(), encoding.to_string());
         }
-        headers.insert("Content-Encoding".to_string(), encoding.to_string());
     }
-    None
 }
 
 #[cfg(test)]
