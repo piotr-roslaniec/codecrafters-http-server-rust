@@ -219,6 +219,7 @@ impl HttpResponse {
         response.extend_from_slice(format!("HTTP/1.1 {}", self.status_code.as_str()).as_bytes());
         response.extend_from_slice(CRLF.as_bytes());
 
+        // Serialize headers
         for (key, header) in &self.headers {
             response.extend_from_slice(key.as_bytes());
             response.extend_from_slice(b": ");
@@ -226,33 +227,35 @@ impl HttpResponse {
             response.extend_from_slice(CRLF.as_bytes());
         }
 
-        if !self.body.is_empty() {
-            let content_encoding = self.headers.get("Content-Encoding");
-            let body = if content_encoding.is_some() {
-                match content_encoding.unwrap().as_str() {
-                    "gzip" => {
-                        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-                        encoder.write_all(&self.body)?;
-                        encoder.finish()?
-                    }
-                    _ => self.body.clone(),
-                }
-            } else {
-                self.body.clone()
-            };
-
-            response.extend_from_slice(format!("Content-Length: {}", body.len()).as_bytes());
+        // Serialize body
+        if self.body.is_empty() {
             response.extend_from_slice(CRLF.as_bytes());
-
-            // End of headers
-            response.extend_from_slice(CRLF.as_bytes());
-
-            // Body
-            response.extend_from_slice(&body);
-        } else {
-            // End of headers, no body
-            response.extend_from_slice(CRLF.as_bytes());
+            return Ok(response);
         }
+
+        let content_encoding = self.headers.get("Content-Encoding");
+        let body = if content_encoding.is_some() {
+            match content_encoding.unwrap().as_str() {
+                "gzip" => {
+                    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+                    encoder.write_all(&self.body)?;
+                    encoder.finish()?
+                }
+                _ => self.body.clone(),
+            }
+        } else {
+            self.body.clone()
+        };
+
+        response.extend_from_slice(format!("Content-Length: {}", body.len()).as_bytes());
+        response.extend_from_slice(CRLF.as_bytes());
+
+        // End of headers
+        response.extend_from_slice(CRLF.as_bytes());
+
+        // Body
+        response.extend_from_slice(&body);
+
         Ok(response)
     }
 
