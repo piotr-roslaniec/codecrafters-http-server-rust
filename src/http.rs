@@ -195,23 +195,23 @@ impl HttpResponse {
         Self::new(StatusCode::OK, body, headers)
     }
 
+    pub fn from_status_code(status_code: StatusCode) -> Self {
+        Self::new(status_code, b"", ResponseHeaders::new())
+    }
+
     pub fn created() -> Self {
-        Self::new(StatusCode::CREATED, b"", ResponseHeaders::new())
+        Self::from_status_code(StatusCode::CREATED)
     }
     pub fn not_found() -> Self {
-        Self::new(StatusCode::NOT_FOUND, b"", ResponseHeaders::new())
+        Self::from_status_code(StatusCode::NOT_FOUND)
     }
 
     pub fn method_not_allowed() -> Self {
-        Self::new(StatusCode::NOT_ALLOWED, b"", ResponseHeaders::new())
+        Self::from_status_code(StatusCode::NOT_ALLOWED)
     }
 
     pub fn internal_server_error() -> Self {
-        Self::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            b"",
-            ResponseHeaders::new(),
-        )
+        Self::from_status_code(StatusCode::INTERNAL_SERVER_ERROR)
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>> {

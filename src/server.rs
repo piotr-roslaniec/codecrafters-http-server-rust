@@ -42,7 +42,6 @@ impl Server {
                         }
                         None => break,
                     };
-
                     let request = match HttpRequest::from_bytes(&bytes) {
                         Ok(req) => req,
                         Err(e) => {
