@@ -1,5 +1,5 @@
-use std::io::Error as IoError;
-use std::net::AddrParseError;
+use std::{io::Error as IoError, net::AddrParseError};
+
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -28,4 +28,8 @@ pub enum HttpError {
     InvalidContentLength,
     #[error("Missing request line")]
     MissingRequestLine,
+    #[error("Empty request line")]
+    EmptyRequestLine,
+    #[error("Unsupported version")]
+    UnsupportedVersion,
 }
